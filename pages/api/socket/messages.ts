@@ -33,7 +33,7 @@ export default async function handler(
       return res.status(400).json({ error: "Content missing" });
     }
 
-    const server = db.server.findFirst({
+    const server = await db.server.findFirst({
       where: {
         id: serverId as string,
         members: {
@@ -48,7 +48,7 @@ export default async function handler(
     });
 
     if (!server) {
-      return res.status(404).json({ messages: "Server not found" });
+      return res.status(404).json({ message: "Server not found" });
     }
 
     const channel = await db.channel.findFirst({
@@ -59,12 +59,38 @@ export default async function handler(
     });
 
     if (!channel) {
-      return res.status(404).json({ messages: "Channel not found" });
+      return res.status(404).json({ message: "Channel not found" });
     }
 
     const member = server.members.find(
       (member) => member.profileId === profile.id
     );
+
+    if (!member) {
+      return res.status(404).json({ message: "Member not found" });
+    }
+
+    const message = await db.message.create({
+      data: {
+        content,
+        fileUrl,
+        channelId: channelId as string,
+        memberId: member.id,
+      },
+      include: {
+        member: {
+          include: {
+            profile: true,
+          },
+        },
+      },
+    });
+
+    const channelKey = `chat:${channelId}:messages`;
+
+    res?.socket?.server?.io?.emit(channelKey, message);
+
+    return res.status(200).json(message);
   } catch (error) {
     console.log("[MESSAGES_POST", error);
     return res.status(500).json({ message: "Internal Error" });
